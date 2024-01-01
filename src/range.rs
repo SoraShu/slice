@@ -1,3 +1,4 @@
+use crate::error::ParseRangeError;
 use std::str::FromStr;
 
 #[derive(Eq, Debug)]
@@ -9,26 +10,21 @@ pub struct Range {
 }
 
 impl Range {
-    fn new(start: Index, end: Index, step: isize) -> Self {
+    fn new(start: Index, end: Index, step: isize) -> Option<Self> {
         match step {
-            0 => Self {
-                start: Index::Head(0),
-                end: Index::Head(0),
-                step: 0,
-                reversed: false,
-            },
-            i if i > 0 => Self {
+            0 => None,
+            i if i > 0 => Some(Range {
                 start,
                 end,
-                step: step as usize,
+                step: i as usize,
                 reversed: false,
-            },
-            _ => Self {
+            }),
+            i => Some(Range {
                 start,
                 end,
-                step: step.unsigned_abs(),
+                step: i.unsigned_abs(),
                 reversed: true,
-            },
+            }),
         }
     }
 
@@ -51,6 +47,7 @@ impl PartialEq for Range {
 pub enum Index {
     Head(usize),
     Tail(usize),
+    Empty,
 }
 
 impl Index {
@@ -63,38 +60,34 @@ impl Index {
 }
 
 impl FromStr for Index {
-    type Err = &'static str;
+    type Err = ParseRangeError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
-            "+" => Ok(Index::Head(0)),
-            "-" => Ok(Index::Tail(0)),
-            _ => s
-                .parse()
-                .map(Index::new)
-                .map_err(|_| "Could not parse index"),
+            "" => Ok(Index::Empty),
+            _ => s.parse().map(Index::new).map_err(|_| ParseRangeError),
         }
     }
 }
 
-fn _parse(slice: &str) -> Result<Range, &'static str> {
-    let mut range = slice.split(':');
+fn _parse(slice: &str) -> Result<Option<Range>, ParseRangeError> {
+    let mut range = slice.split(':').map(|s| s.trim());
 
     let start = range
         .next()
-        .unwrap_or("+")
+        .unwrap_or("")
         .parse()
-        .map_err(|_| "Could not parse start")?;
+        .map_err(|_| ParseRangeError)?;
     let end = range
         .next()
-        .unwrap_or("-")
+        .unwrap_or("")
         .parse()
-        .map_err(|_| "Could not parse end")?;
-    let step = range
-        .next()
-        .unwrap_or("1")
-        .parse()
-        .map_err(|_| "Could not parse step")?;
+        .map_err(|_| ParseRangeError)?;
+    let step = match range.next() {
+        None => 1,
+        Some("") => 1,
+        Some(s) => s.parse().map_err(|_| ParseRangeError)?,
+    };
 
     Ok(Range::new(start, end, step))
 }
@@ -103,12 +96,13 @@ pub fn parse(slices: Vec<String>) -> Vec<Range> {
     let mut ranges = Vec::new();
 
     for slice in slices {
-        ranges.push(match _parse(&slice) {
-            Ok(range) => range,
-            Err(e) => {
-                panic!("Could not parse slice: {}", e)
+        match _parse(&slice) {
+            Ok(Some(range)) => ranges.push(range),
+            Ok(None) => {}
+            Err(_) => {
+                panic!("Could not parse slice: {}", &slice)
             }
-        });
+        };
     }
 
     ranges
