@@ -18,5 +18,5 @@ pub struct Args {
 
     /// Python like slice, like 1:10:2
     #[arg()]
-    slice: Vec<String>,
+    pub slice: Vec<String>,
 }
